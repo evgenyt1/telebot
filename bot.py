@@ -52,7 +52,7 @@ def api(method, payload):
 
 
 def reply_for(update, call_api=api, now=None):
-    """Handle only a new, incoming Business message in a private chat."""
+    """Handle a new human Business message in a private chat."""
     message = update.get("business_message")
     if not isinstance(message, dict):
         return False
@@ -65,12 +65,15 @@ def reply_for(update, call_api=api, now=None):
         or not isinstance(text, str)
         or not WORD.search(text)
         or not connection_id
-        or sender.get("id") != chat.get("id")
         or sender.get("is_bot")
+        or message.get("sender_business_bot")
     ):
         return False
 
     connection = call_api("getBusinessConnection", {"business_connection_id": connection_id})
+    owner_id = (connection.get("user") or {}).get("id")
+    if sender.get("id") not in (chat.get("id"), owner_id):
+        return False
     if not connection.get("is_enabled") or not (connection.get("rights") or {}).get("can_reply"):
         LOG.info("Business connection cannot reply; skipping")
         return False
@@ -83,6 +86,7 @@ def reply_for(update, call_api=api, now=None):
         "chat_id": chat["id"],
         "text": answer,
     })
+    LOG.info("Answered %s business message", "incoming" if sender.get("id") == chat.get("id") else "outgoing")
     return True
 
 
@@ -121,6 +125,12 @@ class Handler(BaseHTTPRequestHandler):
         update_id = update.get("update_id")
         if update_id not in self.seen_updates:
             try:
+                if "business_connection" in update:
+                    LOG.info("Business connection update received")
+                elif "business_message" in update:
+                    LOG.info("Business message update received")
+                else:
+                    LOG.info("Other Telegram update received")
                 reply_for(update)
             except Exception:
                 LOG.exception("Could not process Telegram update")

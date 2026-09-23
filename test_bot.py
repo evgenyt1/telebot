@@ -22,7 +22,7 @@ class BotTests(unittest.TestCase):
     def api(self, method, payload):
         self.calls.append((method, payload))
         if method == "getBusinessConnection":
-            return {"is_enabled": True, "rights": {"can_reply": True}}
+            return {"is_enabled": True, "user": {"id": 999}, "rights": {"can_reply": True}}
         return {"message_id": 1}
 
     def test_replies_in_business_chat(self):
@@ -33,11 +33,19 @@ class BotTests(unittest.TestCase):
             "text": "Сейчас 18:45 (Europe/Istanbul).",
         }))
 
-    def test_ignores_outgoing_and_other_words(self):
+    def test_replies_to_owner_message_too(self):
         self.update["business_message"]["from"]["id"] = 999
-        self.assertFalse(reply_for(self.update, self.api))
+        self.assertTrue(reply_for(self.update, self.api))
+        self.assertEqual(self.calls[-1][0], "sendMessage")
+
+    def test_ignores_other_words(self):
         self.update["business_message"]["from"]["id"] = 123
         self.update["business_message"]["text"] = "времени"
+        self.assertFalse(reply_for(self.update, self.api))
+        self.assertEqual(self.calls, [])
+
+    def test_ignores_bot_reply(self):
+        self.update["business_message"]["sender_business_bot"] = {"id": 42}
         self.assertFalse(reply_for(self.update, self.api))
         self.assertEqual(self.calls, [])
 
